@@ -61,7 +61,7 @@ def configure_retriever():
 
 tool = create_retriever_tool(
     configure_retriever(),
-    "search_pdh_thesis",
+    "search_phd_thesis",
     "Searches and returns text from PhD thesis. This tool should be used to answer questions about the PhD thesis.",
 )
 tools = [tool]

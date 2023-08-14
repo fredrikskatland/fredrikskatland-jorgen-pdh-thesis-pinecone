@@ -32,7 +32,7 @@ st.set_page_config(
 
 "# Chat🦜🔗"
 
-local = True
+local = False
 
 
 @st.cache_resource(ttl="1h")

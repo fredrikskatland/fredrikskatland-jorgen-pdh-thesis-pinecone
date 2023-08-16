@@ -21,6 +21,9 @@ from langchain.vectorstores import Pinecone
 import os
 from langchain.vectorstores import Vectara
 
+local = True
+
+
 client = Client()
 
 st.set_page_config(
@@ -30,74 +33,109 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+@st.cache_resource(ttl="1h")
+def configure_retriever(vectorstore_choice='Pinecone'):
+    if vectorstore_choice == 'Pinecone':
+        if local:
+            pinecone.init(
+                api_key=os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
+                environment = os.getenv("PINECONE_ENV_FINN")  # next to api key in console
+            )
+            embeddings = OpenAIEmbeddings() 
+        else:
+            pinecone.init(
+                api_key=st.secrets["PINECONE_API_FINN"], 
+                environment = st.secrets["PINECONE_ENV_FINN"]
+            )
+            embeddings = OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"])
+
+        index_name = "jorgen-phd-thesis"
+        vectorstore = Pinecone.from_existing_index(index_name = index_name, embedding=embeddings)
+        retriever = vectorstore.as_retriever()
+
+        return retriever
+    
+    elif vectorstore_choice == 'Vectara':
+        if local:
+            vectara_customer_id= '2554602663' #st.secrets["vectara_customer_id"]
+            vectara_corpus_id= '4' #st.secrets["vectara_corpus_id"]
+            vectara_api_key= 'zqt_mEQkp_O_5GsApAIzErYwqSIxdjVNVKiIJXggbg' #st.secrets["vectara_api_key"]
+        else:
+            vectara_customer_id=st.secrets["vectara_customer_id"]
+            vectara_corpus_id=st.secrets["vectara_corpus_id"]
+            vectara_api_key=st.secrets["vectara_api_key"]
+
+        vectorstore = Vectara(
+                vectara_customer_id=vectara_customer_id,
+                vectara_corpus_id=vectara_corpus_id,
+                vectara_api_key=vectara_api_key
+        )
+        retriever = vectorstore.as_retriever(n_sentence_context=200)
+
+        return retriever
+
+def reload_llm(model_choice="gpt-4", temperature=0, vectorstore_choice="Pinecone"):
+    if local:
+        llm = ChatOpenAI(temperature=temperature, streaming=True, model=model_choice, )
+    else:
+        llm = ChatOpenAI(temperature=temperature, streaming=True, model=model_choice, openai_api_key=st.secrets["openai_api_key"])
+    message = SystemMessage(
+        content=(
+            "You are a helpful chatbot who is tasked with answering questions about the contents of the PhD thesis. "
+            "Unless otherwise explicitly stated, it is probably fair to assume that questions are about the PhD thesis. "
+            "If there is any ambiguity, you probably assume they are about that."
+        )
+    )
+    prompt = OpenAIFunctionsAgent.create_prompt(
+        system_message=message,
+        extra_prompt_messages=[MessagesPlaceholder(variable_name="history")],
+    )
+
+    tool = create_retriever_tool(
+        configure_retriever(vectorstore_choice),
+        "search_pdh_thesis",
+        "Searches and returns text from PhD thesis. This tool should be used to answer questions about the PhD thesis.",
+    )
+    tools = [tool]
+
+    agent = OpenAIFunctionsAgent(llm=llm, tools=tools, prompt=prompt)
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        return_intermediate_steps=True,
+    )
+    memory = AgentTokenBufferMemory(llm=llm)
+    print ("Reloaded LLM")
+    return agent_executor, memory, llm
+
+
+# Using "with" notation
+with st.sidebar:
+    with st.form('my_form'):
+        model_choice = st.radio(
+            "Model",
+            ("gpt-4", "gpt-3.5-turbo-16k")
+        )
+        temperature = st.slider('Temperature', 0.0, 1.0, 0.0, 0.01)
+        vectorstore_choice = st.radio(
+            "Vectorstore",
+            ("Pinecone", "Vectara")
+        )
+        submitted = st.form_submit_button('Reload LLM')
+    if submitted: 
+        reload_llm(model_choice=model_choice, temperature=temperature)
+        print(model_choice, temperature)
+    
+
 "# Chat🦜🔗"
 
-local = False
 
-
-@st.cache_resource(ttl="1h")
-def configure_retriever():
-    if local:
-        pinecone.init(
-            api_key=os.getenv("PINECONE_API_FINN"),  # find at app.pinecone.io
-            environment = os.getenv("PINECONE_ENV_FINN")  # next to api key in console
-        )
-        embeddings = OpenAIEmbeddings() 
-    else:
-        pinecone.init(
-            api_key=st.secrets["PINECONE_API_FINN"], 
-            environment = st.secrets["PINECONE_ENV_FINN"]
-        )
-        embeddings = OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"])
-
-    index_name = "jorgen-phd-thesis"
-    vectorstore = Pinecone.from_existing_index(index_name = index_name, embedding=embeddings)
-    retriever = vectorstore.as_retriever()
-
-    return retriever
-
-
-
-
-tool = create_retriever_tool(
-    configure_retriever(),
-    "search_phd_thesis",
-    "Searches and returns text from PhD thesis. This tool should be used to answer questions about the PhD thesis.",
-)
-tools = [tool]
-
-if local:
-    llm = ChatOpenAI(temperature=0, streaming=True, model="gpt-4", )
-else:
-    llm = ChatOpenAI(temperature=0, streaming=True, model="gpt-4", openai_api_key=st.secrets["openai_api_key"])
-
-message = SystemMessage(
-    content=(
-        "You are a helpful chatbot who is tasked with answering questions about the contents of the PhD thesis. "
-        "Unless otherwise explicitly stated, it is probably fair to assume that questions are about the PhD thesis. "
-        "If there is any ambiguity, you probably assume they are about that."
-    )
-)
-prompt = OpenAIFunctionsAgent.create_prompt(
-    system_message=message,
-    extra_prompt_messages=[MessagesPlaceholder(variable_name="history")],
-)
-agent = OpenAIFunctionsAgent(llm=llm, tools=tools, prompt=prompt)
-agent_executor = AgentExecutor(
-    agent=agent,
-    tools=tools,
-    verbose=True,
-    return_intermediate_steps=True,
-)
-memory = AgentTokenBufferMemory(llm=llm)
 starter_message = "Ask me the PhD thesis!"
 if "messages" not in st.session_state or st.sidebar.button("Clear message history"):
     st.session_state["messages"] = [AIMessage(content=starter_message)]
 
-
-def send_feedback(run_id, score):
-    client.create_feedback(run_id, "user_score", score=score)
-
+agent_executor, memory, llm = reload_llm()
 
 for msg in st.session_state.messages:
     if isinstance(msg, AIMessage):
@@ -110,6 +148,7 @@ for msg in st.session_state.messages:
 if prompt := st.chat_input(placeholder=starter_message):
     st.chat_message("user").write(prompt)
     with st.chat_message("assistant"):
+        agent_executor, memory, llm = reload_llm(model_choice=model_choice, temperature=temperature, vectorstore_choice=vectorstore_choice)
         st_callback = StreamlitCallbackHandler(st.container())
         response = agent_executor(
             {"input": prompt, "history": st.session_state.messages},
@@ -121,3 +160,4 @@ if prompt := st.chat_input(placeholder=starter_message):
         memory.save_context({"input": prompt}, response)
         st.session_state["messages"] = memory.buffer
         run_id = response["__run"].run_id
+        print(llm)

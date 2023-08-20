@@ -21,7 +21,7 @@ from langchain.vectorstores import Pinecone
 import os
 from langchain.vectorstores import Vectara
 
-local = True
+local = False
 
 
 client = Client()

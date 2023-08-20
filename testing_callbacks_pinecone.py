@@ -165,9 +165,9 @@ def configure_retriever(vectorstore_choice='Pinecone'):
     
     elif vectorstore_choice == 'Vectara':
         if local:
-            vectara_customer_id= '2554602663' #st.secrets["vectara_customer_id"]
-            vectara_corpus_id= '4' #st.secrets["vectara_corpus_id"]
-            vectara_api_key= 'zqt_mEQkp_O_5GsApAIzErYwqSIxdjVNVKiIJXggbg' #st.secrets["vectara_api_key"]
+            vectara_customer_id= '' #st.secrets["vectara_customer_id"]
+            vectara_corpus_id= '' #st.secrets["vectara_corpus_id"]
+            vectara_api_key= '' #st.secrets["vectara_api_key"]
         else:
             vectara_customer_id=st.secrets["vectara_customer_id"]
             vectara_corpus_id=st.secrets["vectara_corpus_id"]

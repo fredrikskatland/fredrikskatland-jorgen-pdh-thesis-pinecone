@@ -182,7 +182,7 @@ def configure_retriever(vectorstore_choice='Pinecone'):
 
         return retriever
 
-def reload_llm(model_choice="gpt-4", temperature=0, vectorstore_choice="Pinecone"):
+def reload_llm(model_choice="gpt-4", temperature=0, vectorstore_choice="Pinecone", system_message_choice="Original"):
     if local:
         llm = ChatOpenAI(temperature=temperature, streaming=True, model=model_choice, )
     else:
@@ -259,7 +259,7 @@ for msg in st.session_state.messages:
 if prompt := st.chat_input(placeholder=starter_message):
     st.chat_message("user").write(prompt)
     with st.chat_message("assistant"):
-        agent_executor, memory, llm = reload_llm(model_choice=model_choice, temperature=temperature, vectorstore_choice=vectorstore_choice)
+        agent_executor, memory, llm = reload_llm(model_choice=model_choice, temperature=temperature, vectorstore_choice=vectorstore_choice, system_message_choice=system_message_choice)
         st_callback = StreamlitCallbackHandler(st.container())
         response = agent_executor(
             {"input": prompt, "history": st.session_state.messages},
